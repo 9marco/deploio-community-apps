@@ -1,0 +1,3 @@
+ARG VIKUNJA_VERSION=latest
+
+FROM vikunja/vikunja:${VIKUNJA_VERSION}
