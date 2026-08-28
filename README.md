@@ -2,124 +2,150 @@
 
 # deploio-community-apps
 
-This repository is a showcase of public third-party image integrations and custom application examples, highlighting how standard software and customer-specific configurations can be operated with Deploio.
+Examples and templates for running popular third-party applications (such as database management tools) on [Deploio](https://deplo.io/).
 
-Refer to https://github.com/ninech/deploio-examples for programming language specific examples.
+For language-specific application templates, see [ninech/deploio-examples](https://github.com/ninech/deploio-examples).
 
 > [!IMPORTANT]
-> Apps and configurations in this repository are not officially supported by Nine. If you have any questions, do not hesitate to join our [Deploio Community on Slack](https://join.slack.com/t/deploiocommunity/shared_invite/zt-3oaqwt312-_eBFFh7y_IyOEtlU4kvE9w)!
+> Apps and configurations in this repository are not officially supported by Nine. If you have questions or feedback, join the [Deploio Community on Slack](https://join.slack.com/t/deploiocommunity/shared_invite/zt-3oaqwt312-_eBFFh7y_IyOEtlU4kvE9w)!
 
 ---
 
 ## Web Administration Tools for On-Demand Services
 
-The following Deploio applications use the [`nctl`](https://docs.nine.ch/docs/nctl/) command-line tool and its option for machine-readable output, [authenticated via an API service account](https://docs.nine.ch/docs/nctl/#log-in-with-an-api-service-account), to automatically pre-configure the list of available services with the required CA certificates, as part of the Deploio build and release pipeline.
+These applications configure themselves automatically from environment variables injected when [referencing an On-Demand service](https://docs.nine.ch/docs/deplo-io/configuration/deploio-connecting-to-services). A custom entrypoint maps the `NINE_<IDENTIFIER>_<NAME>_<KEY>` variables to each tool's configuration format, including credentials and CA certificates.
 
 > [!WARNING]
-> If you plan on using these apps with your production environment, it is recommended that you create a fork in your own account, as commits pushed to the main branch of this repository will trigger a new [build and release](https://docs.nine.ch/docs/deplo-io/getting-started-with-deploio#builds-and-releases) for all running apps.
+> If you plan to use these apps in production, fork this repository to your own account. Commits pushed to `main` in this repository will trigger a new [build and release](https://docs.nine.ch/docs/deplo-io/getting-started-with-deploio#builds-and-releases) for deployed apps.
 
+- [Adminer](#adminer)
 - [phpMyAdmin](#phpmyadmin)
 - [pgAdmin](#pgadmin)
+- [pgweb](#pgweb)
 - [Redis Insight](#redis-insight)
 
-If you add or remove an On-Demand service, simply trigger a rebuild of the application in Deploio, for the configuration to be automatically updated.
+Add services to an application using `--service <name>=<kind>/<target-name>`. The chosen name is used as the label in the app (e.g., `--service billing=postgres/prod-db` appears as `billing`). Services can be added or removed at any time with `nctl update application`.
 
-You can optionally specify a project for each of the following apps via the `PROJECT` build environment variable to filter for resources in a specific project.
+Kinds are matched case-insensitively against the API resource kind:
 
-```
-  --build-env=PROJECT=customeridentifier-sub-project
-```
+| Service               | Kind               | App                     |
+| --------------------- | ------------------ | ----------------------- |
+| MySQL (Business)      | `mysql`            | Adminer, phpMyAdmin     |
+| MySQL (Economy)       | `mysqldatabase`    | Adminer, phpMyAdmin     |
+| PostgreSQL (Business) | `postgres`         | Adminer, pgAdmin, pgweb |
+| PostgreSQL (Economy)  | `postgresdatabase` | Adminer, pgAdmin, pgweb |
+| Key-Value Store       | `keyvaluestore`    | Adminer, Redis Insight  |
+| OpenSearch            | `opensearch`       | Adminer                 |
+
+> [!NOTE]
+> Service references are injected when a new release is created. To trigger a new release manually, run `nctl update app <name> --retry-release`.
 
 ### Prerequisites
 
-In order for the build environment in Deploio to be able to list and access parameters of your On-Demand services, you will need to create an API service account, either in [Cockpit](https://cockpit.nine.ch/en/customer/api_service_accounts) or with `nctl`.
-
-
-```shell
-nctl create apiserviceaccount deploio-apps \
-  --project customeridentifier \
-  --organization-access
-```
-
-To create an API service account that can access all parts of the organization, you will need to create it in the 'default' project, matching your customer identifier. Otherwise, you can also restrict it to a specific project.
-
-```shell
-nctl create apiserviceaccount deploio-apps \
-  --project customeridentifier-sub-project
-```
-
-Finally, make sure that `nctl` running on your machine is authenticated with your personal account.
+The apps read configuration at runtime, requiring no API service accounts or build variables. Service references are configured using [`nctl`](https://docs.nine.ch/docs/nctl/):
 
 ```shell
 nctl auth login
 ```
 
+The examples below configure one service each. Replace service names, target databases, and credentials with your own, repeating `--service` for each database you want to administer.
+
+### Adminer
+
+Administers [On-Demand MySQL](https://docs.nine.ch/docs/on-demand-services/mysql/business), [PostgreSQL](https://docs.nine.ch/docs/on-demand-services/postgresql/), [OpenSearch](https://docs.nine.ch/docs/on-demand-services/opensearch) and the [Key-Value Store](https://docs.nine.ch/docs/on-demand-services/on-demand-key-value-store) from a single app, in Business and Economy tiers alike:
+
+```shell
+nctl create application on-demand-adminer \
+  --git-url=https://github.com/9marco/deploio-community-apps.git \
+  --git-sub-path=adminer \
+  --service=production=mysql/my-database \
+  --service=reporting=postgres/my-other-database \
+  --service=search=opensearch/my-opensearch \
+  --service=cache=keyvaluestore/my-kvs \
+  --basic-auth \
+  --dockerfile \
+  --size=micro \
+  --replicas=1
+```
+
+Every referenced service appears in the login form, labelled with the reference name and the system it belongs to. Pick one and press Login; no credentials are entered.
+
+> [!NOTE]
+> MySQL and OpenSearch connections are encrypted but their certificates are not verified. The certificate of an On-Demand service does not match its host name, and both mysqli and Adminer's Elasticsearch driver take the certificate and the host name check from a single flag. PostgreSQL and the Key-Value Store verify the certificate chain without checking the host name.
+
+Adminer browses and edits keys of a Key-Value Store, and runs commands in `SQL command`. For a dedicated interface, use [Redis Insight](#redis-insight) instead.
+
 ### phpMyAdmin
 
-To be used with [On-Demand MySQL (Business Tier)](https://docs.nine.ch/docs/on-demand-services/mysql/business).
+For use with [On-Demand MySQL](https://docs.nine.ch/docs/on-demand-services/mysql/business):
 
 ```shell
 nctl create application on-demand-phpmyadmin \
   --git-url=https://github.com/9marco/deploio-community-apps.git \
   --git-sub-path=phpmyadmin \
-  --sensitive-build-env=NCTL_API_CLIENT_ID=$(nctl get apiserviceaccounts deploio-apps --print-client-id) \
-  --sensitive-build-env=NCTL_API_CLIENT_SECRET=$(nctl get apiserviceaccounts deploio-apps --print-client-secret) \
-  --build-env=ORGANIZATION=customeridentifier \ # change me
+  --service=production=mysql/my-database \
   --basic-auth \
   --dockerfile \
-  --size=mini
+  --size=micro \
+  --replicas=1
 ```
 
 ### pgAdmin
 
-To be used with [On-Demand PostgreSQL (Business Tier)](https://docs.nine.ch/docs/on-demand-services/postgresql/).
+For use with [On-Demand PostgreSQL](https://docs.nine.ch/docs/on-demand-services/postgresql/):
 
 ```shell
 nctl create application on-demand-pgadmin \
   --git-url=https://github.com/9marco/deploio-community-apps.git \
   --git-sub-path=pgadmin \
-  --sensitive-build-env=NCTL_API_CLIENT_ID=$(nctl get apiserviceaccounts deploio-apps --print-client-id) \
-  --sensitive-build-env=NCTL_API_CLIENT_SECRET=$(nctl get apiserviceaccounts deploio-apps --print-client-secret) \
-  --build-env=ORGANIZATION=customeridentifier \       # change me
-  --env=PGADMIN_DEFAULT_EMAIL=admin@example.com \     # change me
-  --sensitive-env=PGADMIN_DEFAULT_PASSWORD=changeme \ # change me
+  --service=production=postgres/my-database \
+  --env=PGADMIN_DEFAULT_EMAIL=admin@example.com \
+  --sensitive-env=PGADMIN_DEFAULT_PASSWORD=changeme \
   --basic-auth \
   --dockerfile \
-  --size=mini
+  --size=micro \
+  --replicas=1
 ```
 
 > [!TIP]
-> Unlike PhpMyAdmin, pgAdmin does not persist its settings in a schema by default, but in a SQLite database on ephemeral storage. To persist your settings across restarts and deployments, you will need to manually create a schema and set an additional environment variable `CONFIG_DATABASE_URI` according to https://www.pgadmin.org/docs/pgadmin4/latest/external_database.html. Deploio applications are automatically redeployed when environment variables are changed, so that they can take effect.
+> By default, pgAdmin stores configuration in an ephemeral SQLite database. To persist settings across restarts and deployments, configure [external database storage](https://www.pgadmin.org/docs/pgadmin4/latest/external_database.html) using the `CONFIG_DATABASE_URI` environment variable.
+
+### pgweb
+
+A lighter-weight alternative to pgAdmin for [On-Demand PostgreSQL](https://docs.nine.ch/docs/on-demand-services/postgresql/). It needs no login and keeps no state, but offers fewer administration features:
+
+```shell
+nctl create application on-demand-pgweb \
+  --git-url=https://github.com/9marco/deploio-community-apps.git \
+  --git-sub-path=pgweb \
+  --service=production=postgres/my-database \
+  --basic-auth \
+  --dockerfile \
+  --size=micro \
+  --replicas=1
+```
+
+Each referenced service becomes a bookmark. Open the connection window and pick one from the dropdown to connect. To hide the manual connection form and allow the generated bookmarks only, add `--env=PGWEB_BOOKMARKS_ONLY=1`.
+
+> [!NOTE]
+> Connections are held in memory per browser session, so run pgweb with a single replica.
 
 ### Redis Insight
 
-To be used with [On-Demand Key-Value Store](https://docs.nine.ch/docs/on-demand-services/on-demand-key-value-store).
+For use with [On-Demand Key-Value Store](https://docs.nine.ch/docs/on-demand-services/on-demand-key-value-store):
 
 ```shell
 nctl create application on-demand-redis-insight \
   --git-url=https://github.com/9marco/deploio-community-apps.git \
   --git-sub-path=redis-insight \
-  --sensitive-build-env=NCTL_API_CLIENT_ID=$(nctl get apiserviceaccounts deploio-apps --print-client-id) \
-  --sensitive-build-env=NCTL_API_CLIENT_SECRET=$(nctl get apiserviceaccounts deploio-apps --print-client-secret) \
-  --build-env=ORGANIZATION=customeridentifier \ # change me
+  --service=cache=keyvaluestore/my-kvs \
+  --env=RI_ACCEPT_TERMS_AND_CONDITIONS=true \
   --basic-auth \
   --dockerfile \
-  --size=mini
+  --size=micro \
+  --replicas=1
 ```
 
----
+### Security
 
-[Deploio](https://deplo.io/) is a great fit for deploying and running custom-built apps, but it's also flexible enough to host standard software like phpMyAdmin.
-Almost any configuration or adjustment exceeding environment variables and standard mechanisms can be achieved by adding additional Docker layers via Deploio's own support for [Dockerfiles](https://docs.nine.ch/docs/deplo-io/dockerfile-build).
-
-Web apps in this repository operate as [stateless services](https://12factor.net/processes), meaning that they do not persist data locally. This ensures they remain compatible with Deploio's ephemeral container architecture.
-For any requirements involving persistent state, [a database](https://docs.nine.ch/docs/on-demand-services/) or [object storage](https://docs.nine.ch/docs/category/object-storage) should be utilized.
-
-## Concepts
-
-The following concepts outline various ways in which third-party images can be used with Deploio, ranging from basic image aliasing to more advanced build pipelines and operation tools.
-
-* Image Aliasing: Deploy any standard image capable of serving web requests, by using a simple `FROM` statement in your Dockerfile to pull directly from an existing registry.
-* Environment Configuration: Customize standard images by using supported environment variables defined at the application or project level.
-* Custom Docker Layers: Extend base images by adding additional Docker image layers to include custom configuration files and code, allowing for anything up to a fully customized entrypoint.
-* Advanced Jobs: Leverage the full capabilities of Deploio by adding [deploy jobs](https://docs.nine.ch/docs/deplo-io/configuration/deploio-deploy-jobs) to finalize successful deployments or [worker jobs](https://docs.nine.ch/docs/deplo-io/configuration/deploio-worker-jobs) for running background processes in a sidecar.
+Because these apps connect automatically using the injected credentials without prompting for passwords, protect public access using [`--basic-auth`](https://docs.nine.ch/docs/deplo-io/configuration/deploio-basic-auth).

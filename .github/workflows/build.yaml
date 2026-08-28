@@ -1,0 +1,42 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      apps: ${{ steps.discover.outputs.apps }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: discover
+        name: Find apps with a Dockerfile
+        run: |
+          apps="$(find . -mindepth 2 -maxdepth 2 -name Dockerfile \
+            | sed 's|^\./||; s|/Dockerfile$||' | sort | jq -Rnc '[inputs]')"
+          echo "apps=${apps}" >>"$GITHUB_OUTPUT"
+          echo "${apps}"
+
+  build:
+    needs: discover
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJSON(needs.discover.outputs.apps) }}
+    name: build (${{ matrix.app }})
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.app }}
+          push: false
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.app }}
