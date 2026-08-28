@@ -18,6 +18,7 @@ These applications configure themselves automatically from environment variables
 > [!WARNING]
 > If you plan to use these apps in production, fork this repository to your own account. Commits pushed to `main` in this repository will trigger a new [build and release](https://docs.nine.ch/docs/deplo-io/getting-started-with-deploio#builds-and-releases) for deployed apps.
 
+- [Adminer](#adminer)
 - [phpMyAdmin](#phpmyadmin)
 - [pgAdmin](#pgadmin)
 - [pgweb](#pgweb)
@@ -27,13 +28,14 @@ Add services to an application using `--service <name>=<kind>/<target-name>`. Th
 
 Kinds are matched case-insensitively against the API resource kind:
 
-| Service               | Kind               | App            |
-| --------------------- | ------------------ | -------------- |
-| MySQL (Business)      | `mysql`            | phpMyAdmin     |
-| MySQL (Economy)       | `mysqldatabase`    | phpMyAdmin     |
-| PostgreSQL (Business) | `postgres`         | pgAdmin, pgweb |
-| PostgreSQL (Economy)  | `postgresdatabase` | pgAdmin, pgweb |
-| Key-Value Store       | `keyvaluestore`    | Redis Insight  |
+| Service               | Kind               | App                     |
+| --------------------- | ------------------ | ----------------------- |
+| MySQL (Business)      | `mysql`            | Adminer, phpMyAdmin     |
+| MySQL (Economy)       | `mysqldatabase`    | Adminer, phpMyAdmin     |
+| PostgreSQL (Business) | `postgres`         | Adminer, pgAdmin, pgweb |
+| PostgreSQL (Economy)  | `postgresdatabase` | Adminer, pgAdmin, pgweb |
+| Key-Value Store       | `keyvaluestore`    | Adminer, Redis Insight  |
+| OpenSearch            | `opensearch`       | Adminer                 |
 
 > [!NOTE]
 > Service references are injected when a new release is created. To trigger a new release manually, run `nctl update app <name> --retry-release`.
@@ -47,6 +49,31 @@ nctl auth login
 ```
 
 The examples below configure one service each. Replace service names, target databases, and credentials with your own, repeating `--service` for each database you want to administer.
+
+### Adminer
+
+Administers [On-Demand MySQL](https://docs.nine.ch/docs/on-demand-services/mysql/business), [PostgreSQL](https://docs.nine.ch/docs/on-demand-services/postgresql/), [OpenSearch](https://docs.nine.ch/docs/on-demand-services/opensearch) and the [Key-Value Store](https://docs.nine.ch/docs/on-demand-services/on-demand-key-value-store) from a single app, in Business and Economy tiers alike:
+
+```shell
+nctl create application on-demand-adminer \
+  --git-url=https://github.com/9marco/deploio-community-apps.git \
+  --git-sub-path=adminer \
+  --service=production=mysql/my-database \
+  --service=reporting=postgres/my-other-database \
+  --service=search=opensearch/my-opensearch \
+  --service=cache=keyvaluestore/my-kvs \
+  --basic-auth \
+  --dockerfile \
+  --size=micro \
+  --replicas=1
+```
+
+Every referenced service appears in the login form, labelled with the reference name and the system it belongs to. Pick one and press Login; no credentials are entered.
+
+> [!NOTE]
+> MySQL and OpenSearch connections are encrypted but their certificates are not verified. The certificate of an On-Demand service does not match its host name, and both mysqli and Adminer's Elasticsearch driver take the certificate and the host name check from a single flag. PostgreSQL and the Key-Value Store verify the certificate chain without checking the host name.
+
+Adminer browses and edits keys of a Key-Value Store, and runs commands in `SQL command`. For a dedicated interface, use [Redis Insight](#redis-insight) instead.
 
 ### phpMyAdmin
 
