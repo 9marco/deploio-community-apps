@@ -20,19 +20,20 @@ These applications configure themselves automatically from environment variables
 
 - [phpMyAdmin](#phpmyadmin)
 - [pgAdmin](#pgadmin)
+- [pgweb](#pgweb)
 - [Redis Insight](#redis-insight)
 
 Add services to an application using `--service <name>=<kind>/<target-name>`. The chosen name is used as the label in the app (e.g., `--service billing=postgres/prod-db` appears as `billing`). Services can be added or removed at any time with `nctl update application`.
 
 Kinds are matched case-insensitively against the API resource kind:
 
-| Service               | Kind               | App           |
-| --------------------- | ------------------ | ------------- |
-| MySQL (Business)      | `mysql`            | phpMyAdmin    |
-| MySQL (Economy)       | `mysqldatabase`    | phpMyAdmin    |
-| PostgreSQL (Business) | `postgres`         | pgAdmin       |
-| PostgreSQL (Economy)  | `postgresdatabase` | pgAdmin       |
-| Key-Value Store       | `keyvaluestore`    | Redis Insight |
+| Service               | Kind               | App            |
+| --------------------- | ------------------ | -------------- |
+| MySQL (Business)      | `mysql`            | phpMyAdmin     |
+| MySQL (Economy)       | `mysqldatabase`    | phpMyAdmin     |
+| PostgreSQL (Business) | `postgres`         | pgAdmin, pgweb |
+| PostgreSQL (Economy)  | `postgresdatabase` | pgAdmin, pgweb |
+| Key-Value Store       | `keyvaluestore`    | Redis Insight  |
 
 > [!NOTE]
 > Service references are injected when a new release is created. To trigger a new release manually, run `nctl update app <name> --retry-release`.
@@ -81,6 +82,26 @@ nctl create application on-demand-pgadmin \
 
 > [!TIP]
 > By default, pgAdmin stores configuration in an ephemeral SQLite database. To persist settings across restarts and deployments, configure [external database storage](https://www.pgadmin.org/docs/pgadmin4/latest/external_database.html) using the `CONFIG_DATABASE_URI` environment variable.
+
+### pgweb
+
+A lighter-weight alternative to pgAdmin for [On-Demand PostgreSQL](https://docs.nine.ch/docs/on-demand-services/postgresql/). It needs no login and keeps no state, but offers fewer administration features:
+
+```shell
+nctl create application on-demand-pgweb \
+  --git-url=https://github.com/9marco/deploio-community-apps.git \
+  --git-sub-path=pgweb \
+  --service=production=postgres/my-database \
+  --basic-auth \
+  --dockerfile \
+  --size=micro \
+  --replicas=1
+```
+
+Each referenced service becomes a bookmark. Open the connection window and pick one from the dropdown to connect. To hide the manual connection form and allow the generated bookmarks only, add `--env=PGWEB_BOOKMARKS_ONLY=1`.
+
+> [!NOTE]
+> Connections are held in memory per browser session, so run pgweb with a single replica.
 
 ### Redis Insight
 
